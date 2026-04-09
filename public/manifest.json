@@ -1,0 +1,15 @@
+{
+  "name": "Bookies Worst Nightmare",
+  "short_name": "BWN",
+  "start_url": "/odds",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#00FF87",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

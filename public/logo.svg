@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Crossbones -->
+  <g stroke="#00FF87" stroke-width="6" stroke-linecap="round">
+    <!-- Left bone -->
+    <line x1="30" y1="85" x2="65" y2="105"/>
+    <circle cx="26" cy="82" r="6" fill="#00FF87"/>
+    <circle cx="26" cy="88" r="6" fill="#00FF87"/>
+    <!-- Right bone -->
+    <line x1="170" y1="85" x2="135" y2="105"/>
+    <circle cx="174" cy="82" r="6" fill="#00FF87"/>
+    <circle cx="174" cy="88" r="6" fill="#00FF87"/>
+    <!-- Bottom left bone -->
+    <line x1="50" y1="145" x2="70" y2="125"/>
+    <circle cx="46" cy="148" r="6" fill="#00FF87"/>
+    <circle cx="52" cy="151" r="6" fill="#00FF87"/>
+    <!-- Bottom right bone -->
+    <line x1="150" y1="145" x2="130" y2="125"/>
+    <circle cx="154" cy="148" r="6" fill="#00FF87"/>
+    <circle cx="148" cy="151" r="6" fill="#00FF87"/>
+  </g>
+  <!-- Skull -->
+  <ellipse cx="100" cy="95" rx="50" ry="45" stroke="#00FF87" stroke-width="5" fill="none"/>
+  <!-- Eyes -->
+  <ellipse cx="82" cy="85" rx="12" ry="14" stroke="#00FF87" stroke-width="4" fill="none"/>
+  <ellipse cx="118" cy="85" rx="12" ry="14" stroke="#00FF87" stroke-width="4" fill="none"/>
+  <!-- Eye glints -->
+  <circle cx="86" cy="82" r="4" fill="#00FF87" opacity="0.6"/>
+  <circle cx="122" cy="82" r="4" fill="#00FF87" opacity="0.6"/>
+  <!-- Nose -->
+  <path d="M97 98 L100 105 L103 98" stroke="#00FF87" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Teeth -->
+  <line x1="88" y1="115" x2="88" y2="125" stroke="#00FF87" stroke-width="3" stroke-linecap="round"/>
+  <line x1="96" y1="117" x2="96" y2="127" stroke="#00FF87" stroke-width="3" stroke-linecap="round"/>
+  <line x1="104" y1="117" x2="104" y2="127" stroke="#00FF87" stroke-width="3" stroke-linecap="round"/>
+  <line x1="112" y1="115" x2="112" y2="125" stroke="#00FF87" stroke-width="3" stroke-linecap="round"/>
+  <!-- Jaw -->
+  <path d="M70 115 Q75 135 100 138 Q125 135 130 115" stroke="#00FF87" stroke-width="4" fill="none" stroke-linecap="round"/>
+</svg>
