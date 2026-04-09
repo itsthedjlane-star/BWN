@@ -50,5 +50,3 @@ export async function POST(
 
   return NextResponse.json({ success: true, result, pnl });
 }
-ess: true, result, pnl });
-}
