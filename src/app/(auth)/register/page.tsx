@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
@@ -95,7 +95,9 @@ function RegisterForm() {
 export default function RegisterPage() {
   return (
     <SessionProvider>
-      <RegisterForm />
+      <Suspense>
+        <RegisterForm />
+      </Suspense>
     </SessionProvider>
   );
 }
