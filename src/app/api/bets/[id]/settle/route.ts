@@ -6,8 +6,9 @@ import { calculatePnL, fractionalToDecimal } from "@/lib/utils";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -18,7 +19,7 @@ export async function POST(
     return NextResponse.json({ error: "Invalid result" }, { status: 400 });
   }
 
-  const bet = await prisma.bet.findUnique({ where: { id: params.id } });
+  const bet = await prisma.bet.findUnique({ where: { id } });
   if (!bet) {
     return NextResponse.json({ error: "Bet not found" }, { status: 404 });
   }
@@ -32,7 +33,7 @@ export async function POST(
   const pnl = calculatePnL(oddsDecimal, bet.stake, result);
 
   await prisma.bet.update({
-    where: { id: params.id },
+    where: { id: id },
     data: { result, pnl, oddsDecimal },
   });
 

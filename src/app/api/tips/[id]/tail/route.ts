@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -16,7 +17,7 @@ export async function POST(
     // Toggle tail
     const existing = await prisma.tail.findUnique({
       where: {
-        tipId_userId: { tipId: params.id, userId: session.user.id },
+        tipId_userId: { tipId: id, userId: session.user.id },
       },
     });
 
@@ -26,16 +27,16 @@ export async function POST(
     }
 
     await prisma.tail.create({
-      data: { tipId: params.id, userId: session.user.id },
+      data: { tipId: id, userId: session.user.id },
     });
 
     // Auto-create a bet entry when tailing
-    const tip = await prisma.tip.findUnique({ where: { id: params.id } });
+    const tip = await prisma.tip.findUnique({ where: { id: id } });
     if (tip) {
       await prisma.bet.create({
         data: {
           userId: session.user.id,
-          tipId: params.id,
+          tipId: id,
           sport: tip.sport,
           event: tip.event,
           pick: tip.pick,

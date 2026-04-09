@@ -6,8 +6,9 @@ import { calculatePnL, fractionalToDecimal } from "@/lib/utils";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user || session.user.role !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -18,7 +19,7 @@ export async function POST(
     return NextResponse.json({ error: "Invalid result" }, { status: 400 });
   }
 
-  const tip = await prisma.tip.findUnique({ where: { id: params.id } });
+  const tip = await prisma.tip.findUnique({ where: { id } });
   if (!tip) {
     return NextResponse.json({ error: "Tip not found" }, { status: 404 });
   }
@@ -29,13 +30,13 @@ export async function POST(
   // Update tip and all linked bets in a transaction
   await prisma.$transaction(async (tx) => {
     await tx.tip.update({
-      where: { id: params.id },
+      where: { id: id },
       data: { result, pnl, oddsDecimal },
     });
 
     // Settle all bets linked to this tip
     const linkedBets = await tx.bet.findMany({
-      where: { tipId: params.id },
+      where: { tipId: id },
     });
 
     for (const bet of linkedBets) {

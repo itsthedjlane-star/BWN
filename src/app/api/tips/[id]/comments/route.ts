@@ -5,10 +5,11 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const comments = await prisma.comment.findMany({
-    where: { tipId: params.id },
+    where: { tipId: id },
     include: { author: { select: { name: true, image: true } } },
     orderBy: { createdAt: "asc" },
   });
@@ -18,8 +19,9 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id: tipId } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -29,7 +31,7 @@ export async function POST(
 
   const comment = await prisma.comment.create({
     data: {
-      tipId: params.id,
+      tipId,
       authorId: session.user.id,
       content,
     },

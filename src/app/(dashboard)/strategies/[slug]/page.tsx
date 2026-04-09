@@ -10,10 +10,11 @@ import { sportEmoji, formatDate } from "@/lib/utils";
 export default async function StrategyPage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
+  const { slug } = await params;
   const strategy = await prisma.strategy.findUnique({
-    where: { slug: params.slug },
+    where: { slug },
     include: { author: { select: { name: true } } },
   });
 
