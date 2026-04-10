@@ -1,0 +1,71 @@
+name: Odds Mover
+description: >
+  DRAFT — not ready to register. Monitors odds on pending BWN tips and
+  alerts Discord when prices shorten or drift significantly.
+
+  TODO before this can run:
+    - BWN /api/mcp must expose `update_tip_odds` (idempotent by
+      direction, same pattern as settle_tip's 409).
+    - Pick an odds provider and stand up an HTTP MCP for it, then add
+      it to mcp_servers below as { type: url, name: odds-api, url: ... }.
+model: claude-sonnet-4-6
+
+# See the daily-digest.yaml header for the BWN MCP wiring pattern.
+# Replace <your-domain> with the real BWN prod hostname.
+mcp_servers:
+  - type: url
+    name: bwn
+    url: https://<your-domain>/api/mcp
+  # - type: url
+  #   name: odds-api
+  #   url: https://odds-api.example.com/mcp
+
+tools:
+  - type: agent_toolset_20260401
+  - type: mcp_toolset
+    mcp_server_name: bwn
+    default_config:
+      permission_policy:
+        type: always_allow
+  # - type: mcp_toolset
+  #   mcp_server_name: odds-api
+  #   default_config:
+  #     permission_policy:
+  #       type: always_allow
+
+skills:
+  - bwn-api-conventions
+  - odds-math
+  - discord-formatter
+
+system: |
+  You are the BWN Odds Mover. Every 30 minutes, compare live market prices
+  against the odds recorded on pending tips and alert on significant moves.
+
+  Procedure:
+    1. Call list_tips with status=PENDING. Skip any tip where the event
+       start time is in the past (the Settler will handle it).
+    2. For each tip, call odds-api.get_current_odds with the sport, event,
+       and pick. Use the odds-math skill to convert everything to decimal
+       and compute the percentage move from the tip's stored oddsDecimal.
+    3. Thresholds (use the odds-math skill's exact implementation):
+         shortened by >= 15%  → "steam" alert (sharp money in, good sign)
+         drifted  by >= 25%   → "drift" alert (bad sign)
+       Anything else: do nothing.
+    4. On an alert, post a short Discord message via discord.post_message:
+       event, pick, original price, new price, % move, direction. Tag the
+       original tipster by display name.
+    5. Record the alert by calling update_tip_odds with the new
+       oddsDecimal and source="odds-mover:<direction>". The BWN endpoint
+       stores the latest market price on the tip and also de-duplicates —
+       it will return 304 if the same direction was already alerted since
+       the last material move, which is how you avoid spamming.
+
+  Hard rules:
+    - NEVER change a tip's `odds` string or settle the tip. update_tip_odds
+      only touches oddsDecimal and source.
+    - Only alert once per tip per direction until the price moves back and
+      crosses the threshold again — rely on the 304 from update_tip_odds
+      as your source of truth, do not maintain your own memory.
+    - If odds-api returns no price (market suspended, event pulled), skip
+      silently.
