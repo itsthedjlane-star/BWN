@@ -11,26 +11,26 @@ import { OddsData, OddsFormat } from "@/types";
 import { cn } from "@/lib/utils";
 
 const SPORT_TABS = [
-  { key: "soccer_epl", label: "Football", emoji: "⚽" },
-  { key: "tennis_atp_french_open", label: "Tennis", emoji: "🎾" },
-  { key: "cricket_icc_world_cup", label: "Cricket", emoji: "🏏" },
-  { key: "darts_pdc", label: "Darts", emoji: "🎯" },
-  { key: "golf_pga_championship", label: "Golf", emoji: "⛳" },
+  { key: "football", label: "Football", emoji: "⚽" },
+  { key: "tennis", label: "Tennis", emoji: "🎾" },
+  { key: "cricket", label: "Cricket", emoji: "🏏" },
+  { key: "darts", label: "Darts", emoji: "🎯" },
+  { key: "golf", label: "Golf", emoji: "⛳" },
 ];
 
 export default function OddsPage() {
   const [odds, setOdds] = useState<OddsData[]>([]);
   const [loading, setLoading] = useState(true);
   const [format, setFormat] = useState<OddsFormat>("fractional");
-  const [activeSport, setActiveSport] = useState("soccer_epl");
+  const [activeSport, setActiveSport] = useState("football");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fetchOdds = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/odds?sport=${activeSport}`);
+      const res = await fetch(`/api/odds?category=${activeSport}`);
       const data = await res.json();
-      setOdds(data);
+      setOdds(Array.isArray(data) ? data : []);
       setLastUpdated(new Date());
     } catch (err) {
       console.error("Failed to fetch odds:", err);
