@@ -37,6 +37,7 @@ export default function AdminPage() {
   const [generating, setGenerating] = useState(false);
   const [pendingTips, setPendingTips] = useState<Tip[]>([]);
   const [settlingId, setSettlingId] = useState<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
   useEffect(() => {
     // Fetch members
@@ -48,10 +49,10 @@ export default function AdminPage() {
       .catch(() => {});
 
     // Fetch pending tips for settlement
-    fetch("/api/tips?result=PENDING")
+    fetch("/api/tips?result=PENDING&limit=50")
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data)) setPendingTips(data);
+        if (Array.isArray(data?.items)) setPendingTips(data.items);
       })
       .catch(() => {});
   }, []);
@@ -77,6 +78,27 @@ export default function AdminPage() {
     navigator.clipboard.writeText(generatedCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const setApproval = async (memberId: string, approved: boolean) => {
+    setApprovingId(memberId);
+    try {
+      const res = await fetch(`/api/admin/members/${memberId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setMembers((prev) =>
+          prev.map((m) => (m.id === memberId ? { ...m, ...updated } : m))
+        );
+      }
+    } catch (err) {
+      console.error("Failed to update approval:", err);
+    } finally {
+      setApprovingId(null);
+    }
   };
 
   const settleTip = async (tipId: string, result: "WON" | "LOST" | "VOID") => {
@@ -253,6 +275,24 @@ export default function AdminPage() {
                     <Badge variant={member.approved ? "success" : "danger"}>
                       {member.approved ? "Approved" : "Pending"}
                     </Badge>
+                    {member.id !== session?.user?.id && (
+                      <Button
+                        size="sm"
+                        variant={member.approved ? "ghost" : "default"}
+                        onClick={() =>
+                          setApproval(member.id, !member.approved)
+                        }
+                        disabled={approvingId === member.id}
+                      >
+                        {approvingId === member.id ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : member.approved ? (
+                          "Revoke"
+                        ) : (
+                          "Approve"
+                        )}
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}

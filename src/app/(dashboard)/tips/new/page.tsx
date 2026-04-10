@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,12 +20,19 @@ const SPORTS = [
   { value: "GOLF", label: "⛳ Golf" },
 ];
 
-export default function NewTipPage() {
+const VALID_SPORTS = new Set(SPORTS.map((s) => s.value));
+
+function NewTipForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
+
+  const prefillSport = searchParams.get("sport");
+  const prefillEvent = searchParams.get("event");
+
   const [form, setForm] = useState({
-    sport: "FOOTBALL",
-    event: "",
+    sport: prefillSport && VALID_SPORTS.has(prefillSport) ? prefillSport : "FOOTBALL",
+    event: prefillEvent ?? "",
     pick: "",
     reasoning: "",
     odds: "",
@@ -166,5 +173,13 @@ export default function NewTipPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function NewTipPage() {
+  return (
+    <Suspense>
+      <NewTipForm />
+    </Suspense>
   );
 }

@@ -123,9 +123,13 @@ export default function SettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-zinc-500">
-            Push notifications and tip alerts coming soon. For now, check the
-            Tips Feed regularly.
+          <p className="text-sm text-zinc-300">
+            New tip alerts are posted to the BWN Discord channel as soon as a
+            tip drops.
+          </p>
+          <p className="text-xs text-zinc-500 mt-2">
+            Turn on Discord mobile notifications for the channel to get pinged
+            in real time.
           </p>
         </CardContent>
       </Card>
