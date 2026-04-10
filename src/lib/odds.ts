@@ -302,5 +302,5 @@ function getMockOdds(sportKey: string): OddsData[] {
     ],
   };
 
-  return mockEvents[sportKey] ?? mockEvents["soccer_epl"]!;
+  return mockEvents[sportKey] ?? [];
 }
