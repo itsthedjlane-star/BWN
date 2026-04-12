@@ -10,6 +10,7 @@ async function main(): Promise<void> {
 
   const client = new Anthropic();
   const sessions = (client as any).beta.sessions;
+
   // 1. Create a session tied to the managed agent's environment.
   const session = await sessions.create({
     agent_id: AGENT_ID,
