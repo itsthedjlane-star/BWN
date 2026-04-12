@@ -14,11 +14,13 @@ import {
   Shield,
   X,
   Bike,
+  Users,
 } from "lucide-react";
 
 const navigation = [
   { name: "Odds", href: "/odds", icon: Gauge },
   { name: "Tips", href: "/tips", icon: Target },
+  { name: "Tipsters", href: "/tipsters", icon: Users },
   { name: "Tracker", href: "/tracker", icon: BarChart3 },
   { name: "Strategies", href: "/strategies", icon: Lightbulb },
   { name: "Matches", href: "/matches", icon: Trophy },

@@ -31,6 +31,7 @@ export const config = {
   matcher: [
     "/odds/:path*",
     "/tips/:path*",
+    "/tipsters/:path*",
     "/tracker/:path*",
     "/strategies/:path*",
     "/matches/:path*",

@@ -28,6 +28,15 @@ enum Sport {
   GOLF
 }
 
+enum TipsterSource {
+  OLBG
+  TIPSTRR
+  FREE_SUPER_TIPS
+  KICKOFF
+  RATED_TIPSTERS
+  SEED
+}
+
 // NextAuth models
 model Account {
   id                String  @id @default(cuid())
@@ -135,6 +144,7 @@ model Bet {
   id        String    @id @default(cuid())
   userId    String
   tipId     String?   // null if manually logged
+  tipsterTipId String? // optional: which external tipster tip influenced this bet
   sport     Sport
   event     String
   pick      String
@@ -146,8 +156,11 @@ model Bet {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  user User @relation(fields: [userId], references: [id])
-  tip  Tip? @relation(fields: [tipId], references: [id])
+  user       User        @relation(fields: [userId], references: [id])
+  tip        Tip?        @relation(fields: [tipId], references: [id])
+  tipsterTip TipsterTip? @relation(fields: [tipsterTipId], references: [id])
+
+  @@index([tipsterTipId])
 }
 
 model Strategy {
@@ -169,4 +182,54 @@ model InviteCode {
   used      Boolean  @default(false)
   usedBy    String?
   createdAt DateTime @default(now())
+}
+
+model Tipster {
+  id          String        @id @default(cuid())
+  source      TipsterSource
+  externalId  String
+  slug        String        @unique
+  name        String
+  sport       Sport?
+  profileUrl  String?
+  roi         Float?
+  strikeRate  Float?
+  totalTips   Int           @default(0)
+  profitPts   Float?
+  activeSince DateTime?
+  form10      String?
+  sourceRank  Int?
+  lastSeenAt  DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  tips TipsterTip[]
+
+  @@unique([source, externalId])
+  @@index([sport, roi])
+  @@index([source, roi])
+}
+
+model TipsterTip {
+  id           String    @id @default(cuid())
+  tipsterId    String
+  externalId   String?
+  sport        Sport
+  event        String
+  selection    String
+  oddsAtTip    String
+  oddsDecimal  Float?
+  eventStartAt DateTime?
+  postedAt     DateTime  @default(now())
+  result       BetResult @default(PENDING)
+  profitLoss   Float?
+  sourceUrl    String?
+
+  tipster Tipster @relation(fields: [tipsterId], references: [id], onDelete: Cascade)
+  bets    Bet[]
+
+  @@unique([tipsterId, externalId])
+  @@index([sport, postedAt])
+  @@index([postedAt])
+  @@index([result])
 }
