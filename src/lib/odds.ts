@@ -21,6 +21,63 @@ export const FOOTBALL_LEAGUES: Record<string, string> = {
   "Ligue 1": "soccer_france_ligue_one",
 };
 
+export type OddsCategory = "football" | "tennis" | "cricket" | "darts" | "golf";
+
+const CATEGORY_TO_GROUP: Record<OddsCategory, string> = {
+  football: "Soccer",
+  tennis: "Tennis",
+  cricket: "Cricket",
+  darts: "Darts",
+  golf: "Golf",
+};
+
+// Used only if the sports-list endpoint itself is unreachable. These keys
+// may be inactive outside their tournament windows, which is fine — they
+// will simply return no events rather than wrong-sport mock data.
+const CATEGORY_FALLBACK_KEY: Record<OddsCategory, string> = {
+  football: "soccer_epl",
+  tennis: "tennis_atp_french_open",
+  cricket: "cricket_icc_world_cup",
+  darts: "darts_pdc",
+  golf: "golf_pga_championship",
+};
+
+interface SportInfo {
+  key: string;
+  group: string;
+  title: string;
+  description: string;
+  active: boolean;
+  has_outrights: boolean;
+}
+
+export async function fetchActiveSports(): Promise<SportInfo[]> {
+  if (!API_KEY) return [];
+  try {
+    const res = await fetch(
+      `${ODDS_API_BASE}/sports/?apiKey=${API_KEY}&all=false`,
+      { next: { revalidate: 3600 } } // 1 hour cache
+    );
+    if (!res.ok) {
+      console.error(`Sports list API error: ${res.status}`);
+      return [];
+    }
+    return (await res.json()) as SportInfo[];
+  } catch (err) {
+    console.error("Failed to fetch sports list:", err);
+    return [];
+  }
+}
+
+export async function resolveCategoryToSportKey(
+  category: OddsCategory
+): Promise<string> {
+  const group = CATEGORY_TO_GROUP[category];
+  const sports = await fetchActiveSports();
+  const active = sports.find((s) => s.group === group && s.active);
+  return active?.key ?? CATEGORY_FALLBACK_KEY[category];
+}
+
 interface OddsAPIResponse {
   id: string;
   sport_key: string;
@@ -302,5 +359,5 @@ function getMockOdds(sportKey: string): OddsData[] {
     ],
   };
 
-  return mockEvents[sportKey] ?? mockEvents["soccer_epl"]!;
+  return mockEvents[sportKey] ?? [];
 }

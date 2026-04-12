@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# agent workspace (Claude skills, not application code)
+.claude/
+
+# internal dev-only stdio MCP wrapper (not ready to ship)
+/bwn-api-mcp/

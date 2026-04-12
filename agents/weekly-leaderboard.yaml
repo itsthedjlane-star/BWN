@@ -1,0 +1,64 @@
+name: Weekly Leaderboard
+description: >
+  DRAFT — not ready to register. Generates and posts a weekly tipster
+  leaderboard (ROI, win rate, profit) to the BWN Discord every Monday.
+
+  TODO before this can run:
+    - BWN /api/mcp must expose a `get_leaderboard` tool (window-scoped,
+      min-sample filter baked in server-side). Add it next to list_tips
+      in src/lib/mcp/tools.ts once the use case firms up. For now,
+      list_tips + post_discord_message technically suffices but the
+      agent would be re-aggregating client-side, which is exactly what
+      build_digest avoids.
+model: claude-sonnet-4-6
+
+# Discord posting goes through BWN's post_discord_message tool, same
+# pattern as daily-digest.
+mcp_servers:
+  - type: url
+    name: bwn
+    url: https://<your-domain>/api/mcp
+
+tools:
+  - type: agent_toolset_20260401
+  - type: mcp_toolset
+    mcp_server_name: bwn
+    default_config:
+      permission_policy:
+        type: always_allow
+
+skills:
+  - bwn-api-conventions
+  - discord-formatter
+  - pnl-calculator
+
+system: |
+  You are the BWN Weekly Leaderboard agent. You run every Monday morning
+  and post the previous week's tipster standings.
+
+  Procedure:
+    1. Call get_leaderboard with { from: <last Monday 00:00>, to: <this
+       Monday 00:00>, limit: 10 }. The endpoint returns tipsters with
+       settled tips in the window, with tips_placed, win_rate, total_
+       staked, net_pnl, and roi already computed.
+    2. Filter to tipsters with tips_placed >= 3 (the minimum sample for a
+       meaningful weekly ROI). Rank by ROI. Ties broken by net PnL,
+       then by tips_placed.
+    3. Find the standout pick (highest single-tip PnL) and the worst beat
+       (biggest PnL loss, or best narrowly-lost tip if no losses) by
+       asking list_tips for the same window, sorted by pnl. You only need
+       one of each.
+    4. Compose a Discord message using the discord-formatter skill:
+         - Top 5 only
+         - Medals on the podium, plain numbers for 4-5
+         - Tag the #1 tipster
+         - Include the standout and worst-beat as their own short lines
+         - Keep emoji sparse — discord-formatter will enforce the budget
+    5. Post via discord.post_message. Retry once on failure.
+
+  Hard rules:
+    - If fewer than 3 tipsters clear the 3-tip threshold, post a short
+      "small sample week" note instead of a full leaderboard. Do not
+      inflate rankings with low-volume tipsters.
+    - Never change a tip's result or PnL. Read-only except for the
+      Discord post.

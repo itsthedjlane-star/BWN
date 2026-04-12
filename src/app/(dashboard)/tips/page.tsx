@@ -27,24 +27,52 @@ export default function TipsPage() {
   const [resultFilter, setResultFilter] = useState("ALL");
   const [tips, setTips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+
+  const buildParams = useCallback(
+    (cursor?: string | null) => {
+      const params = new URLSearchParams();
+      if (sportFilter !== "ALL") params.set("sport", sportFilter);
+      if (resultFilter !== "ALL") params.set("result", resultFilter);
+      if (cursor) params.set("cursor", cursor);
+      return params;
+    },
+    [sportFilter, resultFilter]
+  );
 
   const fetchTips = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (sportFilter !== "ALL") params.set("sport", sportFilter);
-      if (resultFilter !== "ALL") params.set("result", resultFilter);
-      const res = await fetch(`/api/tips?${params}`);
+      const res = await fetch(`/api/tips?${buildParams()}`);
       if (res.ok) {
         const data = await res.json();
-        setTips(data);
+        setTips(data.items ?? []);
+        setNextCursor(data.nextCursor ?? null);
       }
     } catch (err) {
       console.error("Failed to fetch tips:", err);
     } finally {
       setLoading(false);
     }
-  }, [sportFilter, resultFilter]);
+  }, [buildParams]);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(`/api/tips?${buildParams(nextCursor)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTips((prev) => [...prev, ...(data.items ?? [])]);
+        setNextCursor(data.nextCursor ?? null);
+      }
+    } catch (err) {
+      console.error("Failed to load more tips:", err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [buildParams, nextCursor, loadingMore]);
 
   useEffect(() => {
     fetchTips();
@@ -124,9 +152,30 @@ export default function TipsPage() {
             </CardContent>
           </Card>
         ) : (
-          tips.map((tip) => (
-            <TipCard key={tip.id} tip={tip} onUpdate={fetchTips} />
-          ))
+          <>
+            {tips.map((tip) => (
+              <TipCard key={tip.id} tip={tip} onUpdate={fetchTips} />
+            ))}
+            {nextCursor && (
+              <div className="flex justify-center pt-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 size={14} className="mr-1.5 animate-spin" />
+                      Loading
+                    </>
+                  ) : (
+                    "Load more"
+                  )}
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
