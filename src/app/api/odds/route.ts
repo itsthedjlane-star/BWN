@@ -4,6 +4,7 @@ import {
   fetchOddsForCategory,
   ODDS_CATEGORIES,
   OddsCategory,
+  OddsQuotaError,
 } from "@/lib/odds";
 
 function isCategory(value: string): value is OddsCategory {
@@ -22,17 +23,21 @@ export async function GET(req: NextRequest) {
           { status: 400 }
         );
       }
-      const odds = await fetchOddsForCategory(categoryParam);
-      return NextResponse.json(odds);
+      // Returns { status, events } so the client can render a quota banner.
+      const result = await fetchOddsForCategory(categoryParam);
+      return NextResponse.json(result);
     }
 
     const sportKey = sportParam ?? "soccer_epl";
     const odds = await fetchOdds(sportKey);
-    return NextResponse.json(odds);
+    return NextResponse.json({ status: "ok", events: odds });
   } catch (error) {
+    if (error instanceof OddsQuotaError) {
+      return NextResponse.json({ status: "quota_exceeded", events: [] });
+    }
     console.error("Odds fetch error:", error);
     return NextResponse.json(
-      { error: "Failed to fetch odds" },
+      { status: "error", events: [], error: "Failed to fetch odds" },
       { status: 500 }
     );
   }

@@ -42,6 +42,37 @@ export const ODDS_CATEGORIES: OddsCategory[] = [
   "greyhound_racing",
 ];
 
+type OddsMarket = "h2h" | "outrights";
+
+// Some Odds API groups only publish outright (tournament-winner) markets —
+// calling them with markets=h2h returns INVALID_MARKET_COMBO and zero
+// events. Golf is the obvious one on our list; the rest genuinely have
+// H2H match-ups when in season.
+const CATEGORY_MARKET: Record<OddsCategory, OddsMarket> = {
+  football: "h2h",
+  tennis: "h2h",
+  cricket: "h2h",
+  darts: "h2h",
+  golf: "outrights",
+  horse_racing: "h2h",
+  greyhound_racing: "h2h",
+};
+
+export type OddsFetchStatus = "ok" | "quota_exceeded" | "error";
+
+export interface OddsFetchResult {
+  status: OddsFetchStatus;
+  events: OddsData[];
+}
+
+/** Thrown by fetchOdds when the Odds API reports OUT_OF_USAGE_CREDITS. */
+export class OddsQuotaError extends Error {
+  constructor() {
+    super("Odds API usage quota exceeded");
+    this.name = "OddsQuotaError";
+  }
+}
+
 // The Odds API groups its sports by these human strings. When Odds API
 // renames a group we only update here.
 const CATEGORY_TO_GROUP: Record<OddsCategory, string> = {
@@ -121,20 +152,37 @@ export async function resolveCategoryToSportKey(
 /**
  * Fetches odds for every active sport key in the category in parallel,
  * flattens, and sorts by kick-off. Individual fetch failures are swallowed
- * so one bad key doesn't break the whole tab.
+ * so one bad key doesn't break the whole tab — unless every single fetch
+ * failed with a quota error, in which case we surface that status so the
+ * UI can distinguish "plan paused" from "nothing scheduled".
  */
 export async function fetchOddsForCategory(
   category: OddsCategory
-): Promise<OddsData[]> {
+): Promise<OddsFetchResult> {
   const keys = await resolveCategoryToSportKeys(category);
-  if (keys.length === 0) return [];
-  const settled = await Promise.allSettled(keys.map((k) => fetchOdds(k)));
+  if (keys.length === 0) return { status: "ok", events: [] };
+  const market = CATEGORY_MARKET[category];
+  const settled = await Promise.allSettled(keys.map((k) => fetchOdds(k, market)));
   const events: OddsData[] = [];
+  let anyQuota = false;
+  let anyError = false;
   for (const r of settled) {
-    if (r.status === "fulfilled") events.push(...r.value);
+    if (r.status === "fulfilled") {
+      events.push(...r.value);
+    } else if (r.reason instanceof OddsQuotaError) {
+      anyQuota = true;
+    } else {
+      anyError = true;
+    }
   }
   events.sort((a, b) => a.commenceTime.localeCompare(b.commenceTime));
-  return events;
+  // Status precedence: if we got any events, we're OK — show them even if
+  // some sibling keys hit quota. Only escalate to quota/error when the
+  // whole fanout produced nothing, so the empty-state UI tells the user
+  // why it's empty.
+  const status: OddsFetchStatus =
+    events.length > 0 ? "ok" : anyQuota ? "quota_exceeded" : anyError ? "error" : "ok";
+  return { status, events };
 }
 
 interface OddsAPIResponse {
@@ -142,8 +190,10 @@ interface OddsAPIResponse {
   sport_key: string;
   sport_title: string;
   commence_time: string;
-  home_team: string;
-  away_team: string;
+  // Null on outright markets — outright events have a pool of runners/
+  // players rather than a home/away pair.
+  home_team: string | null;
+  away_team: string | null;
   bookmakers: {
     key: string;
     title: string;
@@ -154,45 +204,66 @@ interface OddsAPIResponse {
   }[];
 }
 
-export async function fetchOdds(sportKey: string): Promise<OddsData[]> {
+export async function fetchOdds(
+  sportKey: string,
+  market: OddsMarket = "h2h"
+): Promise<OddsData[]> {
   if (!API_KEY) {
     console.warn("ODDS_API_KEY not set, using mock data");
     return getMockOdds(sportKey);
   }
 
-  try {
-    const res = await fetch(
-      `${ODDS_API_BASE}/sports/${sportKey}/odds/?apiKey=${API_KEY}&regions=uk&markets=h2h&oddsFormat=decimal`,
-      { next: { revalidate: 300 } } // 5 min cache
-    );
+  const res = await fetch(
+    `${ODDS_API_BASE}/sports/${sportKey}/odds/?apiKey=${API_KEY}&regions=uk&markets=${market}&oddsFormat=decimal`,
+    { next: { revalidate: 300 } } // 5 min cache
+  );
 
-    if (!res.ok) {
-      console.error(`Odds API error: ${res.status}`);
-      return getMockOdds(sportKey);
+  if (!res.ok) {
+    // The Odds API returns a JSON body with error_code; try to read it so
+    // we can distinguish quota vs. other errors.
+    let errorCode: string | undefined;
+    try {
+      const body = (await res.json()) as { error_code?: string };
+      errorCode = body?.error_code;
+    } catch {
+      // body wasn't JSON — fall through
     }
-
-    const data: OddsAPIResponse[] = await res.json();
-
-    return data.map((event) => ({
-      id: event.id,
-      sport: sportKeyToSport(event.sport_key),
-      event: `${event.home_team} vs ${event.away_team}`,
-      homeTeam: event.home_team,
-      awayTeam: event.away_team,
-      commenceTime: event.commence_time,
-      bookmakers: event.bookmakers.map((bm) => ({
-        key: bm.key,
-        title: bm.title,
-        markets: bm.markets.map((m) => ({
-          key: m.key,
-          outcomes: m.outcomes,
-        })),
-      })),
-    }));
-  } catch (error) {
-    console.error("Failed to fetch odds:", error);
-    return getMockOdds(sportKey);
+    console.error(`Odds API ${sportKey} error: ${res.status} ${errorCode ?? ""}`);
+    if (errorCode === "OUT_OF_USAGE_CREDITS") throw new OddsQuotaError();
+    // Treat "benign" shape errors as empty rather than failures — a
+    // sport key that's out of season or the wrong market for this sport
+    // just means "no events here", not "something broke".
+    if (
+      errorCode === "INVALID_MARKET_COMBO" ||
+      errorCode === "UNKNOWN_SPORT" ||
+      errorCode === "INVALID_SPORT"
+    ) {
+      return [];
+    }
+    throw new Error(`Odds API error: ${res.status}`);
   }
+
+  const data: OddsAPIResponse[] = await res.json();
+
+  return data.map((event) => ({
+    id: event.id,
+    sport: sportKeyToSport(event.sport_key),
+    event:
+      event.home_team && event.away_team
+        ? `${event.home_team} vs ${event.away_team}`
+        : event.sport_title || sportKey,
+    homeTeam: event.home_team ?? "",
+    awayTeam: event.away_team ?? "",
+    commenceTime: event.commence_time,
+    bookmakers: event.bookmakers.map((bm) => ({
+      key: bm.key,
+      title: bm.title,
+      markets: bm.markets.map((m) => ({
+        key: m.key,
+        outcomes: m.outcomes,
+      })),
+    })),
+  }));
 }
 
 function sportKeyToSport(key: string): Sport {
