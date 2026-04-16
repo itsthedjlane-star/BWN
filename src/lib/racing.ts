@@ -189,7 +189,7 @@ export async function fetchRacingMeetings(
   }
 
   try {
-    const events = await fetchOddsForCategory(
+    const { events } = await fetchOddsForCategory(
       discipline === "horses" ? "horse_racing" : "greyhound_racing"
     );
     if (events.length === 0) return [];

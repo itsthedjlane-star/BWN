@@ -5,7 +5,7 @@ import { OddsCard } from "@/components/odds/odds-card";
 import { OddsToggle } from "@/components/odds/odds-toggle";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Gauge, RefreshCw } from "lucide-react";
+import { Gauge, RefreshCw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OddsData, OddsFormat } from "@/types";
 import { cn } from "@/lib/utils";
@@ -21,8 +21,11 @@ const SPORT_TABS = [
   { key: "golf", label: "Golf", emoji: "⛳" },
 ];
 
+type FetchStatus = "ok" | "quota_exceeded" | "error";
+
 export default function OddsPage() {
   const [odds, setOdds] = useState<OddsData[]>([]);
+  const [status, setStatus] = useState<FetchStatus>("ok");
   const [loading, setLoading] = useState(true);
   const [format, setFormat] = useState<OddsFormat>("fractional");
   const [activeSport, setActiveSport] = useState("football");
@@ -33,10 +36,19 @@ export default function OddsPage() {
     try {
       const res = await fetch(`/api/odds?category=${activeSport}`);
       const data = await res.json();
-      setOdds(Array.isArray(data) ? data : []);
+      // New shape: { status, events }. Old bare-array responses still
+      // accepted as a safety net during rollout.
+      if (Array.isArray(data)) {
+        setOdds(data);
+        setStatus("ok");
+      } else {
+        setOdds(Array.isArray(data.events) ? data.events : []);
+        setStatus((data.status as FetchStatus) ?? "ok");
+      }
       setLastUpdated(new Date());
     } catch (err) {
       console.error("Failed to fetch odds:", err);
+      setStatus("error");
     } finally {
       setLoading(false);
     }
@@ -109,8 +121,26 @@ export default function OddsPage() {
       ) : odds.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-zinc-500">No odds available for this sport right now.</p>
-            <p className="text-xs text-zinc-600 mt-2">Check back closer to match day.</p>
+            {status === "quota_exceeded" ? (
+              <>
+                <AlertTriangle className="mx-auto text-amber-400 mb-3" size={24} />
+                <p className="text-amber-400">Odds feed paused.</p>
+                <p className="text-xs text-zinc-500 mt-2">
+                  The live-odds provider&apos;s usage quota has been reached for this billing period.
+                </p>
+              </>
+            ) : status === "error" ? (
+              <>
+                <AlertTriangle className="mx-auto text-red-400 mb-3" size={24} />
+                <p className="text-red-400">Couldn&apos;t load odds.</p>
+                <p className="text-xs text-zinc-500 mt-2">Try again in a moment.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-zinc-500">No odds available for this sport right now.</p>
+                <p className="text-xs text-zinc-600 mt-2">Check back closer to match day.</p>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (
