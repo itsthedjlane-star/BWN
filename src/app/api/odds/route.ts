@@ -1,27 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   fetchOdds,
-  resolveCategoryToSportKey,
+  fetchOddsForCategory,
+  ODDS_CATEGORIES,
   OddsCategory,
 } from "@/lib/odds";
 
-const VALID_CATEGORIES: OddsCategory[] = [
-  "football",
-  "tennis",
-  "cricket",
-  "darts",
-  "golf",
-];
-
 function isCategory(value: string): value is OddsCategory {
-  return (VALID_CATEGORIES as string[]).includes(value);
+  return (ODDS_CATEGORIES as string[]).includes(value);
 }
 
 export async function GET(req: NextRequest) {
   const sportParam = req.nextUrl.searchParams.get("sport");
   const categoryParam = req.nextUrl.searchParams.get("category");
 
-  let sportKey: string;
   try {
     if (categoryParam) {
       if (!isCategory(categoryParam)) {
@@ -30,11 +22,11 @@ export async function GET(req: NextRequest) {
           { status: 400 }
         );
       }
-      sportKey = await resolveCategoryToSportKey(categoryParam);
-    } else {
-      sportKey = sportParam ?? "soccer_epl";
+      const odds = await fetchOddsForCategory(categoryParam);
+      return NextResponse.json(odds);
     }
 
+    const sportKey = sportParam ?? "soccer_epl";
     const odds = await fetchOdds(sportKey);
     return NextResponse.json(odds);
   } catch (error) {

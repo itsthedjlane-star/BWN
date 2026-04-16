@@ -53,25 +53,152 @@ export interface GreyhoundMeeting {
 
 export type RacingMeeting = HorseMeeting | GreyhoundMeeting;
 
-const RACING_API_KEY = process.env.RACING_API_KEY;
+import { fetchOddsForCategory, decimalToFractional } from "./odds";
+import type { OddsData } from "@/types";
+
+const ODDS_API_KEY = process.env.ODDS_API_KEY;
+
+// Map The Odds API events → our meeting/race shapes. Coverage varies by
+// day — The Odds API tends to have marquee UK/IE meetings (Cheltenham,
+// Aintree, Ascot) and outrights rather than every daily card. The UI
+// handles empty meetings with a polite message.
+function oddsEventsToHorseMeetings(events: OddsData[]): HorseMeeting[] {
+  const byVenue = new Map<string, OddsData[]>();
+  for (const ev of events) {
+    // sport_title often looks like "Horse Racing - Cheltenham"; fall back
+    // to homeTeam which Odds API sometimes uses as the venue/race name.
+    const venue = extractVenue(ev);
+    const list = byVenue.get(venue) ?? [];
+    list.push(ev);
+    byVenue.set(venue, list);
+  }
+  const meetings: HorseMeeting[] = [];
+  let id = 1;
+  for (const [course, evs] of byVenue) {
+    meetings.push({
+      id: String(id++),
+      course,
+      going: "—",
+      races: evs.map((ev) => ({
+        time: new Date(ev.commenceTime).toLocaleTimeString("en-GB", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        name: ev.event,
+        distance: "—",
+        going: "—",
+        prize: "—",
+        class: "—",
+        runners: bestOddsRunners(ev).map((r, i) => ({
+          number: i + 1,
+          name: r.name,
+          jockey: "—",
+          trainer: "—",
+          form: "—",
+          odds: decimalToFractional(r.price),
+          weight: "—",
+          age: 0,
+          silks: silkColor(i),
+        })),
+      })),
+    });
+  }
+  return meetings;
+}
+
+function oddsEventsToGreyhoundMeetings(events: OddsData[]): GreyhoundMeeting[] {
+  const byVenue = new Map<string, OddsData[]>();
+  for (const ev of events) {
+    const venue = extractVenue(ev);
+    const list = byVenue.get(venue) ?? [];
+    list.push(ev);
+    byVenue.set(venue, list);
+  }
+  const meetings: GreyhoundMeeting[] = [];
+  let id = 1;
+  for (const [track, evs] of byVenue) {
+    meetings.push({
+      id: String(id++),
+      track,
+      races: evs.map((ev) => ({
+        time: new Date(ev.commenceTime).toLocaleTimeString("en-GB", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        name: ev.event,
+        distance: "—",
+        prize: "—",
+        runners: bestOddsRunners(ev)
+          .slice(0, 6)
+          .map((r, i) => ({
+            trap: i + 1,
+            name: r.name,
+            form: "—",
+            odds: decimalToFractional(r.price),
+            trainer: "—",
+          })),
+      })),
+    });
+  }
+  return meetings;
+}
+
+function extractVenue(ev: OddsData): string {
+  // Odds API sometimes encodes venue in home_team; other times in event
+  // title. Fall back to a generic bucket so nothing silently merges.
+  if (ev.homeTeam && ev.homeTeam !== ev.awayTeam) return ev.homeTeam;
+  const parts = ev.event.split(" - ");
+  return parts[0] ?? "Racing";
+}
+
+function bestOddsRunners(ev: OddsData): { name: string; price: number }[] {
+  const best = new Map<string, number>();
+  for (const bm of ev.bookmakers) {
+    for (const outcome of bm.markets[0]?.outcomes ?? []) {
+      const existing = best.get(outcome.name);
+      if (existing === undefined || outcome.price > existing) {
+        best.set(outcome.name, outcome.price);
+      }
+    }
+  }
+  return [...best.entries()]
+    .map(([name, price]) => ({ name, price }))
+    .sort((a, b) => a.price - b.price);
+}
+
+function silkColor(i: number): string {
+  const colors = [
+    "bg-blue-500",
+    "bg-green-500",
+    "bg-red-500",
+    "bg-yellow-500",
+    "bg-purple-500",
+    "bg-orange-500",
+    "bg-zinc-400",
+    "bg-pink-500",
+  ];
+  return colors[i % colors.length];
+}
 
 export async function fetchRacingMeetings(
   discipline: RacingDiscipline
 ): Promise<RacingMeeting[]> {
-  if (!RACING_API_KEY) {
+  // No API key → dev mock so the page is never empty while working offline.
+  if (!ODDS_API_KEY) {
     return discipline === "horses" ? MOCK_HORSE_MEETINGS : MOCK_GREYHOUND_MEETINGS;
   }
 
-  // TODO: real integration. Recommended provider is The Racing API
-  // (https://theracingapi.com) — it covers UK/IE horse and greyhound cards,
-  // runners, odds, jockeys, and trainers. When integrating, set RACING_API_KEY
-  // in .env and replace the mock fallback below with a fetch that maps the
-  // provider response onto the HorseMeeting / GreyhoundMeeting shapes above.
   try {
-    return discipline === "horses" ? MOCK_HORSE_MEETINGS : MOCK_GREYHOUND_MEETINGS;
+    const events = await fetchOddsForCategory(
+      discipline === "horses" ? "horse_racing" : "greyhound_racing"
+    );
+    if (events.length === 0) return [];
+    return discipline === "horses"
+      ? oddsEventsToHorseMeetings(events)
+      : oddsEventsToGreyhoundMeetings(events);
   } catch (err) {
     console.error("Racing API error:", err);
-    return discipline === "horses" ? MOCK_HORSE_MEETINGS : MOCK_GREYHOUND_MEETINGS;
+    return [];
   }
 }
 

@@ -3,10 +3,12 @@ import type { OddsData, Sport } from "@/types";
 const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
 const API_KEY = process.env.ODDS_API_KEY;
 
-// Sport key mappings for The Odds API
+// Legacy single-key mappings kept for backward compatibility with callers
+// that still pass raw sport keys (cron, agent tools). Prefer
+// resolveCategoryToSportKeys / fetchOddsForCategory in new code.
 export const SPORT_KEYS: Record<string, string> = {
   FOOTBALL: "soccer_epl",
-  TENNIS: "tennis_atp_french_open", // changes per tournament
+  TENNIS: "tennis_atp_french_open",
   CRICKET: "cricket_icc_world_cup",
   DARTS: "darts_pdc",
   GOLF: "golf_pga_championship",
@@ -17,29 +19,52 @@ export const FOOTBALL_LEAGUES: Record<string, string> = {
   "Champions League": "soccer_uefa_champs_league",
   "La Liga": "soccer_spain_la_liga",
   "Serie A": "soccer_italy_serie_a",
-  "Bundesliga": "soccer_germany_bundesliga",
+  Bundesliga: "soccer_germany_bundesliga",
   "Ligue 1": "soccer_france_ligue_one",
 };
 
-export type OddsCategory = "football" | "tennis" | "cricket" | "darts" | "golf";
+export type OddsCategory =
+  | "football"
+  | "tennis"
+  | "cricket"
+  | "darts"
+  | "golf"
+  | "horse_racing"
+  | "greyhound_racing";
 
+export const ODDS_CATEGORIES: OddsCategory[] = [
+  "football",
+  "tennis",
+  "cricket",
+  "darts",
+  "golf",
+  "horse_racing",
+  "greyhound_racing",
+];
+
+// The Odds API groups its sports by these human strings. When Odds API
+// renames a group we only update here.
 const CATEGORY_TO_GROUP: Record<OddsCategory, string> = {
   football: "Soccer",
   tennis: "Tennis",
   cricket: "Cricket",
   darts: "Darts",
   golf: "Golf",
+  horse_racing: "Horse Racing",
+  greyhound_racing: "Greyhound Racing",
 };
 
-// Used only if the sports-list endpoint itself is unreachable. These keys
-// may be inactive outside their tournament windows, which is fine — they
-// will simply return no events rather than wrong-sport mock data.
-const CATEGORY_FALLBACK_KEY: Record<OddsCategory, string> = {
-  football: "soccer_epl",
-  tennis: "tennis_atp_french_open",
-  cricket: "cricket_icc_world_cup",
-  darts: "darts_pdc",
-  golf: "golf_pga_championship",
+// Fallback keys used when the /sports discovery endpoint is unreachable
+// (e.g. no API key in dev). Return every key we know about for the category
+// so football gets all six leagues instead of just EPL.
+const CATEGORY_FALLBACK_KEYS: Record<OddsCategory, string[]> = {
+  football: Object.values(FOOTBALL_LEAGUES),
+  tennis: ["tennis_atp_french_open", "tennis_wta_french_open"],
+  cricket: ["cricket_icc_world_cup", "cricket_test_match", "cricket_the_hundred"],
+  darts: ["darts_pdc"],
+  golf: ["golf_pga_championship", "golf_masters_tournament", "golf_the_open_championship"],
+  horse_racing: [],
+  greyhound_racing: [],
 };
 
 interface SportInfo {
@@ -69,13 +94,47 @@ export async function fetchActiveSports(): Promise<SportInfo[]> {
   }
 }
 
+/**
+ * Returns every active sport key whose `group` matches the requested
+ * category. Falls back to the static list in `CATEGORY_FALLBACK_KEYS` if
+ * discovery returns nothing — those keys may be inactive and will just
+ * return zero events, which the UI handles.
+ */
+export async function resolveCategoryToSportKeys(
+  category: OddsCategory
+): Promise<string[]> {
+  const group = CATEGORY_TO_GROUP[category];
+  const sports = await fetchActiveSports();
+  const active = sports.filter((s) => s.group === group && s.active);
+  if (active.length > 0) return active.map((s) => s.key);
+  return CATEGORY_FALLBACK_KEYS[category];
+}
+
+/** Backward-compat helper — returns the first resolved key or fallback. */
 export async function resolveCategoryToSportKey(
   category: OddsCategory
 ): Promise<string> {
-  const group = CATEGORY_TO_GROUP[category];
-  const sports = await fetchActiveSports();
-  const active = sports.find((s) => s.group === group && s.active);
-  return active?.key ?? CATEGORY_FALLBACK_KEY[category];
+  const keys = await resolveCategoryToSportKeys(category);
+  return keys[0] ?? CATEGORY_FALLBACK_KEYS[category][0] ?? "soccer_epl";
+}
+
+/**
+ * Fetches odds for every active sport key in the category in parallel,
+ * flattens, and sorts by kick-off. Individual fetch failures are swallowed
+ * so one bad key doesn't break the whole tab.
+ */
+export async function fetchOddsForCategory(
+  category: OddsCategory
+): Promise<OddsData[]> {
+  const keys = await resolveCategoryToSportKeys(category);
+  if (keys.length === 0) return [];
+  const settled = await Promise.allSettled(keys.map((k) => fetchOdds(k)));
+  const events: OddsData[] = [];
+  for (const r of settled) {
+    if (r.status === "fulfilled") events.push(...r.value);
+  }
+  events.sort((a, b) => a.commenceTime.localeCompare(b.commenceTime));
+  return events;
 }
 
 interface OddsAPIResponse {
@@ -142,6 +201,8 @@ function sportKeyToSport(key: string): Sport {
   if (key.startsWith("cricket")) return "CRICKET";
   if (key.startsWith("darts")) return "DARTS";
   if (key.startsWith("golf")) return "GOLF";
+  if (key.startsWith("horseracing") || key.startsWith("horse_racing")) return "HORSE_RACING";
+  if (key.startsWith("greyhounds") || key.startsWith("greyhound")) return "GREYHOUND_RACING";
   return "FOOTBALL";
 }
 

@@ -233,3 +233,17 @@ model TipsterTip {
   @@index([postedAt])
   @@index([result])
 }
+
+// Logged when a user clicks a "Bet now" affiliate link. Powers simple
+// per-surface CTR analytics without shipping a client-side tracker.
+model OutboundClick {
+  id         String   @id @default(cuid())
+  userId     String?
+  bookmaker  String
+  context    String   // "odds" | "tip" | "tracker"
+  ref        String?  // event id, tip id, etc.
+  createdAt  DateTime @default(now())
+
+  @@index([bookmaker, createdAt])
+  @@index([context, createdAt])
+}
