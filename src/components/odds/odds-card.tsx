@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { OddsData, OddsFormat } from "@/types";
 import { sportEmoji, decimalToFractional } from "@/lib/utils";
+import { BOOKMAKERS, buildOutboundUrl, isKnownBookmaker } from "@/lib/bookmakers";
+import { ExternalLink } from "lucide-react";
 
 function formatOdds(price: number, format: OddsFormat): string {
   if (format === "decimal") return price.toFixed(2);
@@ -22,17 +24,26 @@ export function OddsCard({ event, oddsFormat }: OddsCardProps) {
   if (!market) return null;
 
   // Find best odds for each outcome across all bookmakers
-  const bestOdds: Record<string, { price: number; bookmaker: string }> = {};
+  const bestOdds: Record<string, { price: number; bookmaker: string; bookmakerKey: string }> = {};
   for (const bm of event.bookmakers) {
     for (const outcome of bm.markets[0]?.outcomes ?? []) {
       if (
         !bestOdds[outcome.name] ||
         outcome.price > bestOdds[outcome.name].price
       ) {
-        bestOdds[outcome.name] = { price: outcome.price, bookmaker: bm.title };
+        bestOdds[outcome.name] = {
+          price: outcome.price,
+          bookmaker: bm.title,
+          bookmakerKey: bm.key,
+        };
       }
     }
   }
+
+  // Primary CTA: the bookmaker offering the overall best price on any outcome.
+  const primaryCta = Object.values(bestOdds)
+    .filter((b) => isKnownBookmaker(b.bookmakerKey))
+    .sort((a, b) => b.price - a.price)[0];
 
   return (
     <Card className="hover:border-zinc-700 transition-colors">
@@ -123,6 +134,39 @@ export function OddsCard({ event, oddsFormat }: OddsCardProps) {
               </div>
             </div>
           )}
+
+          {/* Bet now CTA row */}
+          <div className="pt-2 border-t border-zinc-800 space-y-2">
+            {primaryCta && (
+              <a
+                href={buildOutboundUrl(primaryCta.bookmakerKey, "odds", event.id)}
+                target="_blank"
+                rel="noopener noreferrer nofollow sponsored"
+                className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg bg-[#00FF87] text-black text-sm font-semibold hover:bg-[#00FF87]/90 transition-colors"
+              >
+                Bet with {primaryCta.bookmaker}
+                <ExternalLink size={14} />
+              </a>
+            )}
+            <div className="flex flex-wrap gap-1.5">
+              {event.bookmakers
+                .filter((bm) => isKnownBookmaker(bm.key))
+                .filter((bm) => bm.key !== primaryCta?.bookmakerKey)
+                .slice(0, 5)
+                .map((bm) => (
+                  <a
+                    key={bm.key}
+                    href={buildOutboundUrl(bm.key, "odds", event.id)}
+                    target="_blank"
+                    rel="noopener noreferrer nofollow sponsored"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] text-zinc-300 bg-zinc-800 border border-zinc-700 hover:border-zinc-600 hover:text-white transition-colors"
+                  >
+                    {BOOKMAKERS[bm.key.toLowerCase()]?.title ?? bm.title}
+                    <ExternalLink size={10} />
+                  </a>
+                ))}
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

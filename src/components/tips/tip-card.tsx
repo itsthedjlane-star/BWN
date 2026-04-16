@@ -13,8 +13,10 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 import { sportEmoji, timeAgo, confidenceStars } from "@/lib/utils";
+import { buildOutboundUrl } from "@/lib/bookmakers";
 
 interface TipComment {
   id: string;
@@ -223,6 +225,17 @@ export function TipCard({ tip, onUpdate }: TipCardProps) {
             )}
             <span>{tip._count?.tails ?? 0} tailed</span>
           </Button>
+          {tip.result === "PENDING" && (
+            <a
+              href={buildOutboundUrl("bet365", "tip", tip.id)}
+              target="_blank"
+              rel="noopener noreferrer nofollow sponsored"
+              className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold text-black bg-[#00FF87] hover:bg-[#00FF87]/90 transition-colors"
+            >
+              Bet now
+              <ExternalLink size={12} />
+            </a>
+          )}
         </div>
 
         {/* Comments Section */}

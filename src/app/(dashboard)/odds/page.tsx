@@ -9,9 +9,12 @@ import { Gauge, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OddsData, OddsFormat } from "@/types";
 import { cn } from "@/lib/utils";
+import { ResponsibleGamblingFooter } from "@/components/responsible-gambling-footer";
 
 const SPORT_TABS = [
   { key: "football", label: "Football", emoji: "⚽" },
+  { key: "horse_racing", label: "Horse Racing", emoji: "🐎" },
+  { key: "greyhound_racing", label: "Greyhounds", emoji: "🐕" },
   { key: "tennis", label: "Tennis", emoji: "🎾" },
   { key: "cricket", label: "Cricket", emoji: "🏏" },
   { key: "darts", label: "Darts", emoji: "🎯" },
@@ -117,6 +120,7 @@ export default function OddsPage() {
           ))}
         </div>
       )}
+      <ResponsibleGamblingFooter />
     </div>
   );
 }
