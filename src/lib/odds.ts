@@ -8,7 +8,9 @@ const API_KEY = process.env.ODDS_API_KEY;
 // data plan. Off by default — live deployments always show the real
 // "Odds feed paused" state so we don't accidentally mix real and fake
 // prices.
-const DEMO_MODE = process.env.DEMO_MODE === "1";
+// Trim so a value accidentally stored with a trailing newline (e.g.
+// `echo '1' | vercel env add` injects "1\n") still activates the flag.
+const DEMO_MODE = process.env.DEMO_MODE?.trim() === "1";
 
 // Legacy single-key mappings kept for backward compatibility with callers
 // that still pass raw sport keys (cron, agent tools). Prefer
