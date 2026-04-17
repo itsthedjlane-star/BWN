@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { OddsData, OddsFormat } from "@/types";
 import { sportEmoji, decimalToFractional } from "@/lib/utils";
 import { BOOKMAKERS, buildOutboundUrl, isKnownBookmaker } from "@/lib/bookmakers";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, BarChart3 } from "lucide-react";
+import Link from "next/link";
 
 function formatOdds(price: number, format: OddsFormat): string {
   if (format === "decimal") return price.toFixed(2);
@@ -15,9 +16,15 @@ function formatOdds(price: number, format: OddsFormat): string {
 interface OddsCardProps {
   event: OddsData;
   oddsFormat: OddsFormat;
+  /**
+   * Category slug from the /odds page (e.g. "football"). Needed so the
+   * Compare link can fetch the same category feed and find this event
+   * again — The Odds API has no by-id endpoint.
+   */
+  category?: string;
 }
 
-export function OddsCard({ event, oddsFormat }: OddsCardProps) {
+export function OddsCard({ event, oddsFormat, category }: OddsCardProps) {
   const bestBookmaker = event.bookmakers[0];
   const market = bestBookmaker?.markets[0];
 
@@ -148,7 +155,7 @@ export function OddsCard({ event, oddsFormat }: OddsCardProps) {
                 <ExternalLink size={14} />
               </a>
             )}
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {event.bookmakers
                 .filter((bm) => isKnownBookmaker(bm.key))
                 .filter((bm) => bm.key !== primaryCta?.bookmakerKey)
@@ -165,6 +172,15 @@ export function OddsCard({ event, oddsFormat }: OddsCardProps) {
                     <ExternalLink size={10} />
                   </a>
                 ))}
+              {event.bookmakers.length > 1 && (
+                <Link
+                  href={`/odds/compare/${event.id}${category ? `?sport=${category}` : ""}`}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] text-zinc-400 bg-zinc-900 border border-zinc-700 hover:text-white hover:border-zinc-600 transition-colors ml-auto"
+                >
+                  <BarChart3 size={10} />
+                  Compare
+                </Link>
+              )}
             </div>
           </div>
         </div>

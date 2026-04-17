@@ -146,7 +146,12 @@ export default function OddsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {odds.map((event) => (
-            <OddsCard key={event.id} event={event} oddsFormat={format} />
+            <OddsCard
+              key={event.id}
+              event={event}
+              oddsFormat={format}
+              category={activeSport}
+            />
           ))}
         </div>
       )}
