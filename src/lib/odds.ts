@@ -2,6 +2,13 @@ import type { OddsData, Sport } from "@/types";
 
 const ODDS_API_BASE = "https://api.the-odds-api.com/v4";
 const API_KEY = process.env.ODDS_API_KEY;
+// When DEMO_MODE=1, transparently substitute mock data for sports where
+// the live feed is unavailable (no key, quota hit, unknown sport). Lets
+// pre-launch / investor demos show a populated app without paying for a
+// data plan. Off by default — live deployments always show the real
+// "Odds feed paused" state so we don't accidentally mix real and fake
+// prices.
+const DEMO_MODE = process.env.DEMO_MODE === "1";
 
 // Legacy single-key mappings kept for backward compatibility with callers
 // that still pass raw sport keys (cron, agent tools). Prefer
@@ -159,7 +166,13 @@ export async function resolveCategoryToSportKey(
 export async function fetchOddsForCategory(
   category: OddsCategory
 ): Promise<OddsFetchResult> {
-  const keys = await resolveCategoryToSportKeys(category);
+  let keys = await resolveCategoryToSportKeys(category);
+  // Demo mode needs *something* to render even for categories Odds API
+  // doesn't cover (horse/greyhound racing). Synthesise a placeholder key
+  // so fetchOdds → getMockOdds kicks in.
+  if (keys.length === 0 && DEMO_MODE) {
+    keys = [`${category}_demo`];
+  }
   if (keys.length === 0) return { status: "ok", events: [] };
   const market = CATEGORY_MARKET[category];
   const settled = await Promise.allSettled(keys.map((k) => fetchOdds(k, market)));
@@ -229,7 +242,10 @@ export async function fetchOdds(
       // body wasn't JSON — fall through
     }
     console.error(`Odds API ${sportKey} error: ${res.status} ${errorCode ?? ""}`);
-    if (errorCode === "OUT_OF_USAGE_CREDITS") throw new OddsQuotaError();
+    if (errorCode === "OUT_OF_USAGE_CREDITS") {
+      if (DEMO_MODE) return getMockOdds(sportKey);
+      throw new OddsQuotaError();
+    }
     // Treat "benign" shape errors as empty rather than failures — a
     // sport key that's out of season or the wrong market for this sport
     // just means "no events here", not "something broke".
@@ -238,8 +254,10 @@ export async function fetchOdds(
       errorCode === "UNKNOWN_SPORT" ||
       errorCode === "INVALID_SPORT"
     ) {
+      if (DEMO_MODE) return getMockOdds(sportKey);
       return [];
     }
+    if (DEMO_MODE) return getMockOdds(sportKey);
     throw new Error(`Odds API error: ${res.status}`);
   }
 
@@ -324,9 +342,310 @@ export function fractionalToDecimal(fractional: string): number {
   return num / den + 1;
 }
 
-// Mock data for development without API key
+/**
+ * Mock generator — hand-crafted fixtures for the well-known keys, plus a
+ * prefix-based synthesiser that covers anything else (e.g. Bundesliga,
+ * darts_pdc, horse_racing_demo). Used when no API key is set or DEMO_MODE
+ * is on and the live call failed.
+ */
 function getMockOdds(sportKey: string): OddsData[] {
-  const mockEvents: Record<string, OddsData[]> = {
+  const curated = CURATED_MOCKS[sportKey];
+  if (curated) return curated;
+  return synthesiseMock(sportKey);
+}
+
+function synthesiseMock(sportKey: string): OddsData[] {
+  if (sportKey.startsWith("soccer")) return mockSoccer(sportKey);
+  if (sportKey.startsWith("tennis")) return mockTennis(sportKey);
+  if (sportKey.startsWith("cricket")) return mockCricket(sportKey);
+  if (sportKey.startsWith("darts")) return mockDarts(sportKey);
+  if (sportKey.startsWith("golf")) return mockGolf(sportKey);
+  if (
+    sportKey.startsWith("horse") ||
+    sportKey.startsWith("horseracing") ||
+    sportKey.startsWith("horse_racing")
+  ) return mockHorseRacing(sportKey);
+  if (
+    sportKey.startsWith("greyhound") ||
+    sportKey.startsWith("greyhounds") ||
+    sportKey.startsWith("greyhound_racing")
+  ) return mockGreyhounds(sportKey);
+  return [];
+}
+
+// Two bookmakers with slightly different prices so the "best odds"
+// comparison UI has something to highlight.
+function h2hBook(
+  bmKey: "bet365" | "williamhill" | "skybet",
+  outcomes: Array<[string, number]>
+): OddsData["bookmakers"][number] {
+  const title = bmKey === "bet365" ? "Bet365" : bmKey === "williamhill" ? "William Hill" : "Sky Bet";
+  return {
+    key: bmKey,
+    title,
+    markets: [{ key: "h2h", outcomes: outcomes.map(([name, price]) => ({ name, price })) }],
+  };
+}
+
+function mockSoccer(sportKey: string): OddsData[] {
+  const seeds: Array<[string, string]> = sportKey.includes("champs_league")
+    ? [["Real Madrid", "Bayern Munich"], ["PSG", "Inter"]]
+    : sportKey.includes("la_liga")
+    ? [["Barcelona", "Atletico Madrid"], ["Real Betis", "Girona"]]
+    : sportKey.includes("bundesliga")
+    ? [["Bayer Leverkusen", "Borussia Dortmund"], ["Stuttgart", "Eintracht Frankfurt"]]
+    : sportKey.includes("serie_a")
+    ? [["Juventus", "Napoli"], ["Roma", "AC Milan"]]
+    : sportKey.includes("ligue_one")
+    ? [["PSG", "Marseille"], ["Lyon", "Monaco"]]
+    : [["Manchester United", "Arsenal"], ["Everton", "Crystal Palace"]];
+  return seeds.map(([h, a], i) => ({
+    id: `demo-soccer-${sportKey}-${i}`,
+    sport: "FOOTBALL" as Sport,
+    event: `${h} vs ${a}`,
+    homeTeam: h,
+    awayTeam: a,
+    commenceTime: new Date(Date.now() + (i + 1) * 86_400_000).toISOString(),
+    bookmakers: [
+      h2hBook("bet365", [[h, 2.1 + i * 0.2], [a, 3.2 - i * 0.1], ["Draw", 3.5]]),
+      h2hBook("williamhill", [[h, 2.05 + i * 0.2], [a, 3.3 - i * 0.1], ["Draw", 3.4]]),
+      h2hBook("skybet", [[h, 2.15 + i * 0.2], [a, 3.1 - i * 0.1], ["Draw", 3.5]]),
+    ],
+  }));
+}
+
+function mockTennis(sportKey: string): OddsData[] {
+  const matches: Array<[string, string]> = [
+    ["Carlos Alcaraz", "Jannik Sinner"],
+    ["Iga Świątek", "Aryna Sabalenka"],
+    ["Novak Djokovic", "Alexander Zverev"],
+  ];
+  return matches.map(([h, a], i) => ({
+    id: `demo-tennis-${sportKey}-${i}`,
+    sport: "TENNIS" as Sport,
+    event: `${h} vs ${a}`,
+    homeTeam: h,
+    awayTeam: a,
+    commenceTime: new Date(Date.now() + (i + 1) * 43_200_000).toISOString(),
+    bookmakers: [
+      h2hBook("bet365", [[h, 1.7 + i * 0.1], [a, 2.2 - i * 0.05]]),
+      h2hBook("williamhill", [[h, 1.75 + i * 0.1], [a, 2.1 - i * 0.05]]),
+    ],
+  }));
+}
+
+function mockCricket(sportKey: string): OddsData[] {
+  const matches: Array<[string, string]> = sportKey.includes("ipl")
+    ? [["Mumbai Indians", "Chennai Super Kings"], ["Royal Challengers Bengaluru", "Rajasthan Royals"]]
+    : [["England", "India"], ["Australia", "New Zealand"]];
+  return matches.map(([h, a], i) => ({
+    id: `demo-cricket-${sportKey}-${i}`,
+    sport: "CRICKET" as Sport,
+    event: `${h} vs ${a}`,
+    homeTeam: h,
+    awayTeam: a,
+    commenceTime: new Date(Date.now() + (i + 1) * 86_400_000).toISOString(),
+    bookmakers: [
+      h2hBook("bet365", [[h, 1.9 + i * 0.15], [a, 2.0 - i * 0.05]]),
+      h2hBook("skybet", [[h, 1.85 + i * 0.15], [a, 2.05 - i * 0.05]]),
+    ],
+  }));
+}
+
+function mockDarts(sportKey: string): OddsData[] {
+  const matches: Array<[string, string]> = [
+    ["Luke Humphries", "Luke Littler"],
+    ["Michael van Gerwen", "Gerwyn Price"],
+    ["Michael Smith", "Nathan Aspinall"],
+  ];
+  return matches.map(([h, a], i) => ({
+    id: `demo-darts-${sportKey}-${i}`,
+    sport: "DARTS" as Sport,
+    event: `${h} vs ${a}`,
+    homeTeam: h,
+    awayTeam: a,
+    commenceTime: new Date(Date.now() + (i + 1) * 21_600_000).toISOString(),
+    bookmakers: [
+      h2hBook("bet365", [[h, 1.6 + i * 0.2], [a, 2.3 - i * 0.1]]),
+      h2hBook("williamhill", [[h, 1.65 + i * 0.2], [a, 2.25 - i * 0.1]]),
+    ],
+  }));
+}
+
+function mockGolf(sportKey: string): OddsData[] {
+  const outrights: Array<[string, number]> = [
+    ["Scottie Scheffler", 6.0],
+    ["Rory McIlroy", 9.0],
+    ["Xander Schauffele", 12.0],
+    ["Jon Rahm", 14.0],
+    ["Viktor Hovland", 18.0],
+    ["Collin Morikawa", 22.0],
+  ];
+  const tournamentName = sportKey.includes("masters")
+    ? "The Masters — Outright Winner"
+    : sportKey.includes("open_championship")
+    ? "The Open — Outright Winner"
+    : sportKey.includes("us_open")
+    ? "US Open — Outright Winner"
+    : "PGA Championship — Outright Winner";
+  return [
+    {
+      id: `demo-golf-${sportKey}`,
+      sport: "GOLF" as Sport,
+      event: tournamentName,
+      homeTeam: "",
+      awayTeam: "",
+      commenceTime: new Date(Date.now() + 86_400_000 * 3).toISOString(),
+      bookmakers: [
+        {
+          key: "bet365",
+          title: "Bet365",
+          markets: [
+            { key: "outrights", outcomes: outrights.map(([name, price]) => ({ name, price })) },
+          ],
+        },
+        {
+          key: "williamhill",
+          title: "William Hill",
+          markets: [
+            {
+              key: "outrights",
+              outcomes: outrights.map(([name, price]) => ({ name, price: price * 0.97 })),
+            },
+          ],
+        },
+      ],
+    },
+  ];
+}
+
+function mockHorseRacing(sportKey: string): OddsData[] {
+  return [
+    {
+      id: `demo-horse-${sportKey}-1`,
+      sport: "HORSE_RACING" as Sport,
+      event: "Cheltenham — 14:30 Novices' Hurdle",
+      homeTeam: "Cheltenham",
+      awayTeam: "",
+      commenceTime: new Date(Date.now() + 3 * 3_600_000).toISOString(),
+      bookmakers: [
+        {
+          key: "bet365",
+          title: "Bet365",
+          markets: [{
+            key: "outrights",
+            outcomes: [
+              { name: "Thunder Road", price: 3.5 },
+              { name: "Desert Crown", price: 4.0 },
+              { name: "King's Gambit", price: 4.5 },
+              { name: "Noble Spirit", price: 9.0 },
+              { name: "Blazing Trail", price: 11.0 },
+              { name: "Silver Arrow", price: 13.0 },
+            ],
+          }],
+        },
+        {
+          key: "williamhill",
+          title: "William Hill",
+          markets: [{
+            key: "outrights",
+            outcomes: [
+              { name: "Thunder Road", price: 3.4 },
+              { name: "Desert Crown", price: 4.2 },
+              { name: "King's Gambit", price: 4.33 },
+              { name: "Noble Spirit", price: 8.5 },
+              { name: "Blazing Trail", price: 11.5 },
+              { name: "Silver Arrow", price: 13.5 },
+            ],
+          }],
+        },
+      ],
+    },
+    {
+      id: `demo-horse-${sportKey}-2`,
+      sport: "HORSE_RACING" as Sport,
+      event: "Aintree — 15:10 Handicap Chase",
+      homeTeam: "Aintree",
+      awayTeam: "",
+      commenceTime: new Date(Date.now() + 4 * 3_600_000).toISOString(),
+      bookmakers: [
+        {
+          key: "bet365",
+          title: "Bet365",
+          markets: [{
+            key: "outrights",
+            outcomes: [
+              { name: "Iron Duke", price: 4.0 },
+              { name: "Storm Chaser", price: 5.0 },
+              { name: "Celtic Warrior", price: 6.0 },
+              { name: "Midnight Runner", price: 7.0 },
+              { name: "Frontier Gold", price: 15.0 },
+            ],
+          }],
+        },
+      ],
+    },
+  ];
+}
+
+function mockGreyhounds(sportKey: string): OddsData[] {
+  return [
+    {
+      id: `demo-greyhound-${sportKey}-1`,
+      sport: "GREYHOUND_RACING" as Sport,
+      event: "Romford — 19:12 A3 Grade",
+      homeTeam: "Romford",
+      awayTeam: "",
+      commenceTime: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+      bookmakers: [
+        {
+          key: "bet365",
+          title: "Bet365",
+          markets: [{
+            key: "outrights",
+            outcomes: [
+              { name: "T1 — Ballymac Flash", price: 3.0 },
+              { name: "T2 — Droopys Jet", price: 4.0 },
+              { name: "T3 — Priceless Gem", price: 4.5 },
+              { name: "T4 — Salacres Brewer", price: 9.0 },
+              { name: "T5 — Kilara Willow", price: 3.5 },
+              { name: "T6 — Romeo Taylor", price: 13.0 },
+            ],
+          }],
+        },
+      ],
+    },
+    {
+      id: `demo-greyhound-${sportKey}-2`,
+      sport: "GREYHOUND_RACING" as Sport,
+      event: "Shelbourne Park — 20:00 A1 Grade",
+      homeTeam: "Shelbourne Park",
+      awayTeam: "",
+      commenceTime: new Date(Date.now() + 3 * 3_600_000).toISOString(),
+      bookmakers: [
+        {
+          key: "bet365",
+          title: "Bet365",
+          markets: [{
+            key: "outrights",
+            outcomes: [
+              { name: "T1 — Ballymac Leon", price: 2.5 },
+              { name: "T2 — Newinn Hazel", price: 4.0 },
+              { name: "T3 — Crickleowl Ace", price: 5.0 },
+              { name: "T4 — Rising Hawk", price: 6.0 },
+              { name: "T5 — Coolavanny Pip", price: 8.0 },
+              { name: "T6 — Skywalker Duke", price: 11.0 },
+            ],
+          }],
+        },
+      ],
+    },
+  ];
+}
+
+// Hand-crafted data for the original three keys — kept for parity with
+// the pre-demo-mode tests that checked these specific matches.
+const CURATED_MOCKS: Record<string, OddsData[]> = {
     soccer_epl: [
       {
         id: "mock-1",
@@ -489,7 +808,4 @@ function getMockOdds(sportKey: string): OddsData[] {
         ],
       },
     ],
-  };
-
-  return mockEvents[sportKey] ?? [];
-}
+};
