@@ -247,3 +247,23 @@ model OutboundClick {
   @@index([bookmaker, createdAt])
   @@index([context, createdAt])
 }
+
+// Price-over-time snapshots written by the odds cron. Fuels the
+// comparison-page sparklines and the upcoming odds-drop alert triggers.
+// Kept denormalised (no FK to any event/bookmaker table) because the
+// Odds API is the source of truth for event identity and we don't
+// persist events themselves.
+model OddsSnapshot {
+  id        String   @id @default(cuid())
+  eventId   String   // Odds API event id
+  sportKey  String   // raw Odds API sport key (e.g. "soccer_epl")
+  bookmaker String   // lowercased bookmaker key (e.g. "bet365")
+  market    String   // "h2h", "outrights", etc.
+  outcome   String   // outcome name (e.g. "Arsenal", "Scottie Scheffler")
+  price     Float    // decimal odds
+  at        DateTime @default(now())
+
+  @@index([eventId, at])
+  @@index([eventId, bookmaker, outcome, at])
+  @@index([at])
+}

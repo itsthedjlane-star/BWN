@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchActiveSports, fetchOdds, FOOTBALL_LEAGUES } from "@/lib/odds";
+import { prisma } from "@/lib/prisma";
+import type { OddsData } from "@/types";
 
 // Groups we care about — anything Odds API groups under one of these will
 // be pre-cached. Matches the categories exposed on /odds.
@@ -18,7 +20,36 @@ const TARGETED_GROUPS = new Set([
 // on-demand /api/odds path still serves them.
 const MAX_KEYS = 20;
 
-// Vercel Cron job — refreshes odds cache.
+// Flatten an Odds API event into one row per (bookmaker, market, outcome).
+function eventToSnapshots(sportKey: string, ev: OddsData, at: Date) {
+  const rows: {
+    eventId: string;
+    sportKey: string;
+    bookmaker: string;
+    market: string;
+    outcome: string;
+    price: number;
+    at: Date;
+  }[] = [];
+  for (const bm of ev.bookmakers) {
+    for (const market of bm.markets) {
+      for (const outcome of market.outcomes) {
+        rows.push({
+          eventId: ev.id,
+          sportKey,
+          bookmaker: bm.key.toLowerCase(),
+          market: market.key,
+          outcome: outcome.name,
+          price: outcome.price,
+          at,
+        });
+      }
+    }
+  }
+  return rows;
+}
+
+// Vercel Cron job — refreshes odds cache and records price snapshots.
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -42,13 +73,33 @@ export async function GET(req: NextRequest) {
 
     const results = await Promise.allSettled(keys.map((k) => fetchOdds(k)));
 
+    // Persist snapshots. Single "at" timestamp per run so rows line up
+    // cleanly when we query history for a sparkline.
+    const at = new Date();
+    const rows = results.flatMap((r, i) => {
+      if (r.status !== "fulfilled") return [];
+      return r.value.flatMap((ev) => eventToSnapshots(keys[i], ev, at));
+    });
+
+    let snapshotsWritten = 0;
+    if (rows.length > 0) {
+      try {
+        const created = await prisma.oddsSnapshot.createMany({ data: rows });
+        snapshotsWritten = created.count;
+      } catch (err) {
+        // Never fail the whole cron because persistence had a blip —
+        // odds refresh is more valuable than the snapshot history.
+        console.error("Failed to persist odds snapshots:", err);
+      }
+    }
+
     const summary = results.map((r, i) => ({
       sport: keys[i],
       status: r.status,
       count: r.status === "fulfilled" ? r.value.length : 0,
     }));
 
-    return NextResponse.json({ success: true, summary });
+    return NextResponse.json({ success: true, snapshotsWritten, summary });
   } catch (error) {
     console.error("Odds cron failed:", error);
     return NextResponse.json({ error: "Cron job failed" }, { status: 500 });

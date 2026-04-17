@@ -1,15 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { OddsData, OddsFormat } from "@/types";
 import { decimalToFractional } from "@/lib/utils";
 import { BOOKMAKERS, buildOutboundUrl, isKnownBookmaker } from "@/lib/bookmakers";
 import { ExternalLink, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Sparkline } from "./sparkline";
 
 interface CompareTableProps {
   event: OddsData;
   oddsFormat: OddsFormat;
 }
+
+// { [bookmaker]: { [outcome]: [{ price, at }, ...] } }
+type HistorySeries = Record<string, Record<string, { price: number; at: string }[]>>;
 
 function formatOdds(price: number, format: OddsFormat): string {
   if (format === "decimal") return price.toFixed(2);
@@ -17,6 +22,26 @@ function formatOdds(price: number, format: OddsFormat): string {
 }
 
 export function OddsCompareTable({ event, oddsFormat }: CompareTableProps) {
+  const [history, setHistory] = useState<HistorySeries>({});
+
+  // Lazy-load the 24h price history. Sparklines render only when we
+  // have enough data points — empty response is fine, nothing shows.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/odds/${encodeURIComponent(event.id)}/history?hours=24`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.series) setHistory(data.series as HistorySeries);
+      })
+      .catch(() => {
+        /* no history → no sparklines, fine */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [event.id]);
+
   const firstMarket = event.bookmakers[0]?.markets[0];
   if (!firstMarket) {
     return (
@@ -133,16 +158,21 @@ export function OddsCompareTable({ event, oddsFormat }: CompareTableProps) {
                         </td>
                       );
                     }
+                    const historyValues =
+                      history[bm.key.toLowerCase()]?.[name]?.map((p) => p.price) ?? [];
                     const cell = (
                       <span
                         className={cn(
-                          "inline-flex items-center gap-1 font-mono",
+                          "inline-flex items-center gap-1.5 font-mono",
                           isBest
                             ? "text-[#00FF87] font-bold"
                             : "text-zinc-300"
                         )}
                       >
                         {formatOdds(price, oddsFormat)}
+                        {historyValues.length >= 2 && (
+                          <Sparkline values={historyValues} />
+                        )}
                         {known && <ExternalLink size={10} className="opacity-60" />}
                       </span>
                     );
