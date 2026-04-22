@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAgentRequest } from "@/lib/agent-auth";
+import { logAgentOp, requireAgentScope } from "@/lib/agent-auth";
 import { settleTipForAgent } from "@/lib/agent-settle";
 
 /**
@@ -25,8 +25,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const unauthorized = verifyAgentRequest(req);
-  if (unauthorized) return unauthorized;
+  const auth = await requireAgentScope(req, "tips:settle");
+  if (!auth.ok) return auth.response;
 
   const { id } = await params;
 
@@ -64,6 +64,11 @@ export async function POST(
 
   switch (outcome.status) {
     case "ok":
+      logAgentOp(auth.identity, "tips:settle", {
+        tipId: id,
+        result,
+        cascadedBets: outcome.cascadedBets,
+      });
       return NextResponse.json({
         ok: true,
         tip: outcome.tip,

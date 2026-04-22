@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAgentRequest } from "@/lib/agent-auth";
+import { requireAgentScope } from "@/lib/agent-auth";
 import { prisma } from "@/lib/prisma";
 import { resolveDecimalOddsStrict } from "@/lib/agent-settle";
 
@@ -22,8 +22,8 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const unauthorized = verifyAgentRequest(req);
-  if (unauthorized) return unauthorized;
+  const auth = await requireAgentScope(req, "tips:read");
+  if (!auth.ok) return auth.response;
 
   const { id } = await params;
 

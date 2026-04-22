@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
-import { verifyAgentRequest } from "@/lib/agent-auth";
+import { logAgentOp, requireAgentScope } from "@/lib/agent-auth";
 import { buildBwnMcpServer } from "@/lib/mcp/server";
 
 /**
@@ -15,8 +15,9 @@ import { buildBwnMcpServer } from "@/lib/mcp/server";
  * runs in-process: tool calls invoke Prisma / buildDigest /
  * settleTipForAgent / postDiscordMessage directly, no HTTP hop.
  *
- * Auth: `Authorization: Bearer ${BWN_AGENT_TOKEN}`, checked with the
- * same `verifyAgentRequest` helper used by /api/agent/*.
+ * Auth: `Authorization: Bearer <kid>.<secret>` from an AgentKey with the
+ * `mcp:all` scope (or the legacy `BWN_AGENT_TOKEN`), checked with the
+ * same `requireAgentScope` helper used by /api/agent/*.
  *
  * Mode: stateless. We don't pass a sessionIdGenerator, so each
  * request is independent and no session state survives across
@@ -38,8 +39,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function handle(req: NextRequest): Promise<Response> {
-  const unauthorized = verifyAgentRequest(req);
-  if (unauthorized) return unauthorized;
+  const auth = await requireAgentScope(req, "mcp:all");
+  if (!auth.ok) return auth.response;
+  logAgentOp(auth.identity, "mcp:request", { method: req.method });
 
   // Fresh server + transport per request. The transport doesn't hold
   // state in stateless mode, but the Server wiring happens once per

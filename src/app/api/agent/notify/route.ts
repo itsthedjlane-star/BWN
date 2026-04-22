@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAgentRequest } from "@/lib/agent-auth";
+import { logAgentOp, requireAgentScope } from "@/lib/agent-auth";
 import {
   AGENT_NOTIFY_SOURCES,
   DISCORD_CONTENT_LIMIT,
@@ -39,8 +39,8 @@ import {
 const ALLOWED_SOURCES = new Set<string>(AGENT_NOTIFY_SOURCES);
 
 export async function POST(req: NextRequest) {
-  const unauthorized = verifyAgentRequest(req);
-  if (unauthorized) return unauthorized;
+  const auth = await requireAgentScope(req, "notify:send");
+  if (!auth.ok) return auth.response;
 
   let body: unknown;
   try {
@@ -128,6 +128,7 @@ export async function POST(req: NextRequest) {
 
   switch (result.status) {
     case "ok":
+      logAgentOp(auth.identity, "notify:send", { source: result.source });
       return NextResponse.json({ ok: true, source: result.source });
     case "webhook_not_configured":
       return NextResponse.json(

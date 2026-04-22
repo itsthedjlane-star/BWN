@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAgentRequest } from "@/lib/agent-auth";
+import { logAgentOp, requireAgentScope } from "@/lib/agent-auth";
 import { buildDigest } from "@/lib/agent-digest";
 
 /**
@@ -15,14 +15,14 @@ import { buildDigest } from "@/lib/agent-digest";
  *     "to":   "2026-04-10T00:00:00.000Z"  // exclusive, ISO 8601
  *   }
  *
- * Auth: `Authorization: Bearer ${BWN_AGENT_TOKEN}` — verified via
- * verifyAgentRequest. This endpoint is NOT available to human sessions.
+ * Auth: Bearer token with `digest:read` scope (AgentKey or legacy
+ * BWN_AGENT_TOKEN). This endpoint is NOT available to human sessions.
  *
  * Response: DigestPayload (see src/lib/agent-digest.ts).
  */
 export async function POST(req: NextRequest) {
-  const unauthorized = verifyAgentRequest(req);
-  if (unauthorized) return unauthorized;
+  const auth = await requireAgentScope(req, "digest:read");
+  if (!auth.ok) return auth.response;
 
   let body: unknown;
   try {
@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const payload = await buildDigest(from, to);
+    logAgentOp(auth.identity, "digest:read", { from: fromRaw, to: toRaw });
     return NextResponse.json(payload);
   } catch (err) {
     console.error("[agent/digest] buildDigest failed:", err);

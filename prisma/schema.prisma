@@ -237,6 +237,24 @@ model TipsterTip {
   @@index([result])
 }
 
+// Keyed bearer tokens for server-to-server agent access. The token
+// handed to callers is `<id>.<secret>`; we store only a SHA-256 hash
+// of the secret so a DB read cannot recover usable tokens. Replaces
+// the single-shared BWN_AGENT_TOKEN — that env var is still honoured
+// as a legacy fallback but should be retired once all agents migrate.
+model AgentKey {
+  id           String    @id @default(cuid())
+  name         String
+  hashedSecret String
+  scopes       String[]
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+  revokedAt    DateTime?
+  notes        String?
+
+  @@index([revokedAt])
+}
+
 // Logged when a user clicks a "Bet now" affiliate link. Powers simple
 // per-surface CTR analytics without shipping a client-side tracker.
 model OutboundClick {
