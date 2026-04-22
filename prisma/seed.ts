@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import * as fs from "fs";
 import * as path from "path";
 import dotenv from "dotenv";
+import { POLICY_VERSION } from "../src/lib/legal";
 
 dotenv.config();
 
@@ -120,6 +121,9 @@ async function main() {
         email: "admin@bwn.com",
         role: "ADMIN",
         approved: true,
+        ageConfirmedAt: new Date(),
+        policyAcceptedAt: new Date(),
+        policyVersionAccepted: POLICY_VERSION,
       },
     });
     console.log("Created admin user:", adminUser.name);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { generateInviteCode } from "@/lib/invite-codes";
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -9,10 +10,8 @@ export async function POST() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const code = `BWN-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
   const invite = await prisma.inviteCode.create({
-    data: { code },
+    data: { code: generateInviteCode() },
   });
 
   return NextResponse.json({ code: invite.code }, { status: 201 });

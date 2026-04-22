@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAgentRequest } from "@/lib/agent-auth";
+import { requireAgentScope } from "@/lib/agent-auth";
 import { prisma } from "@/lib/prisma";
 import type { BetResult, Sport, Prisma } from "@prisma/client";
 
@@ -46,8 +46,8 @@ const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 50;
 
 export async function GET(req: NextRequest) {
-  const unauthorized = verifyAgentRequest(req);
-  if (unauthorized) return unauthorized;
+  const auth = await requireAgentScope(req, "tips:read");
+  if (!auth.ok) return auth.response;
 
   const url = new URL(req.url);
   const params = url.searchParams;

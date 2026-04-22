@@ -37,6 +37,12 @@ enum TipsterSource {
   SEED
 }
 
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // NextAuth models
 model Account {
   id                String  @id @default(cuid())
@@ -75,15 +81,18 @@ model VerificationToken {
 
 // Application models
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  role          Role      @default(MEMBER)
-  inviteCode    String?
-  approved      Boolean   @default(false)
-  joinedAt      DateTime  @default(now())
+  id              String    @id @default(cuid())
+  name            String?
+  email           String?   @unique
+  emailVerified   DateTime?
+  image           String?
+  role            Role      @default(MEMBER)
+  inviteCode      String?
+  approved        Boolean   @default(false)
+  ageConfirmedAt  DateTime?
+  policyAcceptedAt    DateTime?
+  policyVersionAccepted String?
+  joinedAt        DateTime  @default(now())
 
   accounts   Account[]
   sessions   Session[]
@@ -182,6 +191,29 @@ model InviteCode {
   used      Boolean  @default(false)
   usedBy    String?
   createdAt DateTime @default(now())
+
+  applications InviteApplication[] @relation("IssuedFromApplication")
+}
+
+// Public-facing apply-for-invite requests. Collected on the landing
+// page, reviewed by admins, and (if approved) turned into an
+// InviteCode row that's emailed back to the applicant out-of-band.
+model InviteApplication {
+  id           String            @id @default(cuid())
+  email        String
+  reason       String            @db.Text
+  source       String?           // "how did you hear about us"
+  status       ApplicationStatus @default(PENDING)
+  reviewNotes  String?           @db.Text
+  reviewedAt   DateTime?
+  reviewedBy   String?           // admin user id
+  inviteCodeId String?           // if APPROVED, the code we minted
+  createdAt    DateTime          @default(now())
+
+  inviteCode InviteCode? @relation("IssuedFromApplication", fields: [inviteCodeId], references: [id])
+
+  @@index([email, createdAt])
+  @@index([status, createdAt])
 }
 
 model Tipster {
@@ -232,6 +264,24 @@ model TipsterTip {
   @@index([sport, postedAt])
   @@index([postedAt])
   @@index([result])
+}
+
+// Keyed bearer tokens for server-to-server agent access. The token
+// handed to callers is `<id>.<secret>`; we store only a SHA-256 hash
+// of the secret so a DB read cannot recover usable tokens. Replaces
+// the single-shared BWN_AGENT_TOKEN — that env var is still honoured
+// as a legacy fallback but should be retired once all agents migrate.
+model AgentKey {
+  id           String    @id @default(cuid())
+  name         String
+  hashedSecret String
+  scopes       String[]
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+  revokedAt    DateTime?
+  notes        String?
+
+  @@index([revokedAt])
 }
 
 // Logged when a user clicks a "Bet now" affiliate link. Powers simple

@@ -11,7 +11,6 @@ import { cn, sportEmoji } from "@/lib/utils";
 import { OddsData, OddsFormat } from "@/types";
 import { OddsCompareTable } from "@/components/odds/compare-table";
 import { OddsToggle } from "@/components/odds/odds-toggle";
-import { ResponsibleGamblingFooter } from "@/components/responsible-gambling-footer";
 
 type Status = "loading" | "ok" | "not_found" | "paused" | "error";
 
@@ -146,8 +145,6 @@ export default function OddsComparePage({
           )}
         </CardContent>
       </Card>
-
-      <ResponsibleGamblingFooter />
     </div>
   );
 }

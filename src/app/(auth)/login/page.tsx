@@ -39,6 +39,34 @@ export default function LoginPage() {
         <p className="text-center text-xs text-zinc-700 mt-8">
           Built for the group. No bookies allowed.
         </p>
+        <p className="mt-4 text-xs text-zinc-500 text-center">
+          <span className="inline-block px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-semibold mr-1">
+            18+
+          </span>
+          Gamble responsibly. Help:{" "}
+          <a
+            href="https://www.begambleaware.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-zinc-400 hover:text-white underline"
+          >
+            BeGambleAware.org
+          </a>
+        </p>
+        <nav className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-zinc-600">
+          <a href="/privacy" className="hover:text-zinc-400">
+            Privacy
+          </a>
+          <a href="/terms" className="hover:text-zinc-400">
+            Terms
+          </a>
+          <a href="/cookies" className="hover:text-zinc-400">
+            Cookies
+          </a>
+          <a href="/accessibility" className="hover:text-zinc-400">
+            Accessibility
+          </a>
+        </nav>
       </div>
     </div>
   );

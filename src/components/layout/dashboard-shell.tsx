@@ -4,6 +4,7 @@ import { useState } from "react";
 import { SessionProvider, useSession } from "next-auth/react";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
+import { ResponsibleGamblingFooter } from "@/components/responsible-gambling-footer";
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -21,6 +22,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-4 md:px-6 py-6">
             {children}
+            <ResponsibleGamblingFooter />
           </div>
         </main>
       </div>
