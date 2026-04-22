@@ -37,6 +37,12 @@ enum TipsterSource {
   SEED
 }
 
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // NextAuth models
 model Account {
   id                String  @id @default(cuid())
@@ -185,6 +191,29 @@ model InviteCode {
   used      Boolean  @default(false)
   usedBy    String?
   createdAt DateTime @default(now())
+
+  applications InviteApplication[] @relation("IssuedFromApplication")
+}
+
+// Public-facing apply-for-invite requests. Collected on the landing
+// page, reviewed by admins, and (if approved) turned into an
+// InviteCode row that's emailed back to the applicant out-of-band.
+model InviteApplication {
+  id           String            @id @default(cuid())
+  email        String
+  reason       String            @db.Text
+  source       String?           // "how did you hear about us"
+  status       ApplicationStatus @default(PENDING)
+  reviewNotes  String?           @db.Text
+  reviewedAt   DateTime?
+  reviewedBy   String?           // admin user id
+  inviteCodeId String?           // if APPROVED, the code we minted
+  createdAt    DateTime          @default(now())
+
+  inviteCode InviteCode? @relation("IssuedFromApplication", fields: [inviteCodeId], references: [id])
+
+  @@index([email, createdAt])
+  @@index([status, createdAt])
 }
 
 model Tipster {

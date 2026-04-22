@@ -16,6 +16,7 @@ import {
   CheckCircle,
   XCircle,
   MinusCircle,
+  Mail,
 } from "lucide-react";
 
 interface Tip {
@@ -29,6 +30,17 @@ interface Tip {
   author: { name: string | null };
 }
 
+interface InviteApplication {
+  id: string;
+  email: string;
+  reason: string;
+  source: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  createdAt: string;
+  reviewNotes: string | null;
+  inviteCode: { code: string } | null;
+}
+
 export default function AdminPage() {
   const { data: session } = useSession();
   const [members, setMembers] = useState<any[]>([]);
@@ -38,6 +50,9 @@ export default function AdminPage() {
   const [pendingTips, setPendingTips] = useState<Tip[]>([]);
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [applications, setApplications] = useState<InviteApplication[]>([]);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [lastMintedCode, setLastMintedCode] = useState<string | null>(null);
 
   useEffect(() => {
     // Fetch members
@@ -55,7 +70,40 @@ export default function AdminPage() {
         if (Array.isArray(data?.items)) setPendingTips(data.items);
       })
       .catch(() => {});
+
+    // Fetch pending invite applications
+    fetch("/api/admin/invite-applications?status=PENDING")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setApplications(data);
+      })
+      .catch(() => {});
   }, []);
+
+  const reviewApplication = async (
+    id: string,
+    action: "approve" | "reject"
+  ) => {
+    setReviewingId(id);
+    try {
+      const res = await fetch(`/api/admin/invite-applications/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setApplications((prev) => prev.filter((a) => a.id !== id));
+        if (action === "approve" && data.code) {
+          setLastMintedCode(data.code);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to review application:", err);
+    } finally {
+      setReviewingId(null);
+    }
+  };
 
   const generateCode = async () => {
     setGenerating(true);
@@ -168,6 +216,87 @@ export default function AdminPage() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Invite Applications */}
+      {(applications.length > 0 || lastMintedCode) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Mail size={16} className="text-[#00FF87]" />
+              Invite Applications ({applications.length} pending)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {lastMintedCode && (
+              <div className="mb-4 flex items-center justify-between rounded-lg border border-[#00FF87]/30 bg-[#00FF87]/5 px-3 py-2">
+                <div className="text-xs text-zinc-300">
+                  Minted code for last approval:{" "}
+                  <code className="ml-1 px-2 py-0.5 rounded bg-zinc-800 text-[#00FF87] font-mono">
+                    {lastMintedCode}
+                  </code>
+                  <span className="text-zinc-500"> — email it to the applicant.</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(lastMintedCode);
+                  }}
+                >
+                  <Copy size={14} />
+                </Button>
+              </div>
+            )}
+            {applications.length === 0 ? (
+              <p className="text-sm text-zinc-500 text-center py-4">
+                No pending applications.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {applications.map((app) => (
+                  <div
+                    key={app.id}
+                    className="border border-zinc-800 rounded-lg p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white font-medium truncate">
+                          {app.email}
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-0.5">
+                          {new Date(app.createdAt).toLocaleString()}
+                          {app.source ? ` · via ${app.source}` : ""}
+                        </p>
+                        <p className="text-sm text-zinc-300 mt-2 whitespace-pre-wrap">
+                          {app.reason}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => reviewApplication(app.id, "approve")}
+                          disabled={reviewingId === app.id}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-green-500/10 hover:bg-green-500/20 transition-colors text-green-400 text-xs font-medium disabled:opacity-50"
+                        >
+                          <CheckCircle size={12} />
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => reviewApplication(app.id, "reject")}
+                          disabled={reviewingId === app.id}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-red-500/10 hover:bg-red-500/20 transition-colors text-red-400 text-xs font-medium disabled:opacity-50"
+                        >
+                          <XCircle size={12} />
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Settle Tips */}
       {pendingTips.length > 0 && (
