@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ResponsibleGamblingFooter } from "@/components/responsible-gambling-footer";
 import { ShieldCheck } from "lucide-react";
 
 export const metadata = {
@@ -80,8 +79,6 @@ export default function ResponsibleGamblingPage() {
           </div>
         </CardContent>
       </Card>
-
-      <ResponsibleGamblingFooter />
     </div>
   );
 }
