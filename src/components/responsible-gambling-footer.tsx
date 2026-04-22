@@ -1,12 +1,12 @@
 import Link from "next/link";
 
 /**
- * Required on every page that carries affiliate CTAs to meet UK
- * advertising standards (18+, problem-gambling signposting).
+ * Rendered at the bottom of every dashboard page. Covers the CAP Code 16 /
+ * ICO guidance surface (18+ signposting, help links, policy footer).
  */
 export function ResponsibleGamblingFooter() {
   return (
-    <div className="mt-8 pt-6 border-t border-zinc-800 text-xs text-zinc-500 space-y-1">
+    <div className="mt-8 pt-6 border-t border-zinc-800 text-xs text-zinc-500 space-y-3">
       <p>
         <span className="inline-block px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-semibold mr-2">
           18+
@@ -44,6 +44,20 @@ export function ResponsibleGamblingFooter() {
         Links to bookmakers may earn BWN a commission. Odds and availability
         vary; check the operator&apos;s site for current terms.
       </p>
+      <nav className="flex flex-wrap gap-x-4 gap-y-1 text-zinc-600">
+        <Link href="/privacy" className="hover:text-zinc-400">
+          Privacy
+        </Link>
+        <Link href="/terms" className="hover:text-zinc-400">
+          Terms
+        </Link>
+        <Link href="/cookies" className="hover:text-zinc-400">
+          Cookies
+        </Link>
+        <Link href="/accessibility" className="hover:text-zinc-400">
+          Accessibility
+        </Link>
+      </nav>
     </div>
   );
 }
